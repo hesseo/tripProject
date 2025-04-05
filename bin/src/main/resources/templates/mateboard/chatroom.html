@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8">
+<title>채팅방</title>
+<link rel="stylesheet" href="../css/bootstrap.min.css">
+</head>
+<body>
+<style type="text/css">
+html, body {
+    height: 100%;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+header {
+    flex-shrink: 0; /* header 크기 유지 */
+}
+
+
+footer {
+    flex-shrink: 0; /* footer 크기 유지 */
+} 
+
+body .chatcontainer {
+	min-width: 100%;
+	min-height: 600px;
+	margin: auto;
+	flex: 1; /* 메인 콘텐츠가 늘어날 수 있도록 설정 */
+}
+
+#sendMessage{
+	display: flex;
+	align-items: center;
+}
+#message {
+	width: 500px;
+}
+#sendButton {
+	width: 60px;
+	height: 35px;
+	background-color: #ff9000;
+	margin-top: 1px;
+	margin-left: 10px;
+	vertical-align: middle;
+	font-size: 15px;
+	color: white;
+}
+#exitButton{
+	width: 60px;
+	height: 35px;
+	background-color: #ff9000;
+	margin-top: 1px;
+	margin-left: 10px;
+	vertical-align: middle;
+	font-size: 15px;
+	color: white;
+}
+.room-info {
+	display: flex;
+}
+</style>
+<script th:inline="javascript">
+// DOMContentLoaded 이벤트로 DOM이 완전히 로드된 후 실행되게 함 // 아닐시 오류
+window.addEventListener('DOMContentLoaded', (event) => {
+    const roomCode = new URLSearchParams(window.location.search).get('roomCode');
+    const roomName = new URLSearchParams(window.location.search).get('roomName');
+    
+    document.getElementById("roomName").innerText = roomName;
+    document.getElementById("roomCode").innerText = "[" + roomCode + "]";
+    
+    const socket = new WebSocket(`ws://localhost:8080/chat?roomCode=${roomCode}`);
+
+    socket.onopen = function(event) {
+        console.log("웹소켓 연결 성공!");
+    };
+
+    socket.onmessage = function(event) {
+        const messageContainer = document.getElementById("messages");
+        const message = document.createElement("div");
+        const br = document.createElement("br");
+        message.innerHTML = event.data;
+        messageContainer.appendChild(message);
+        messageContainer.appendChild(br);
+    };
+
+    // 메시지 전송 함수
+    function sendMessage() {
+        const messageInput = document.getElementById("message");
+        if (messageInput.value) {
+            socket.send(messageInput.value);
+            messageInput.value = '';
+        }
+    }
+
+    // 전송 버튼 클릭 시 sendMessage 실행
+    document.getElementById("sendButton").addEventListener("click", sendMessage);
+    
+    function exitMessages() {
+        const exitConfirmed = confirm("퇴장하시겠습니까? 해당 탭은 닫히며, 여기까지의 채팅 기록이 저장됩니다.");
+        
+        if (exitConfirmed) {
+            const messageContainer = document.getElementById("messages");
+
+            // 전체 메시지들을 하나의 배열로 묶기
+            const messages = Array.from(messageContainer.children).map(child => child.innerText);
+
+            const roomCode = new URLSearchParams(window.location.search).get('roomCode');  
+
+            const exitMessage = "[사용자가 채팅방을 나갔습니다.]";
+
+            // POST 요청을 사용해 서버로 메시지 전송
+            fetch('/chat/exit', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    chatcontent: messages.join("<br>") + "<br>" + exitMessage,
+                    chatroomid: roomCode
+                })
+            })
+            .then(response => response.json())  // 응답을 JSON 형식으로 처리
+            .then(data => {
+                // boolean 값이 true이면 메시지가 성공적으로 저장되었다는 의미
+                if (data) {
+                    console.log('메시지가 성공적으로 저장되었습니다.');
+                    window.close();
+                } else {
+                    console.error('메시지 저장 실패');
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+    }
+
+document.getElementById("exitButton").addEventListener("click", exitMessages);
+
+});
+</script>
+
+	
+<div th:replace="~{layouts/header}"></div>   
+
+<div class="chatcontainer">
+    <div>
+        <div class="room-info">
+            <p id="roomName" style="font-weight: bold; font-size: 30px"></p><p id="roomCode" style="color: gray"></p>
+        </div>
+        <div id="messages"></div>
+        <div id="sendMessage">
+        <input type="text" id="message" class="form-control" placeholder="메시지 입력...">
+        <input id="sendButton" type="button" class="btn" value="전송">
+        <input id="exitButton" type="button" class="btn" value="퇴장">
+        </div>
+    </div>
+</div>
+
+<div th:replace="~{layouts/footer}"></div>   
+</body>
+</html>
